@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8)
-project(draw_trajectory LANGUAGES CXX)
+project(reconstruction-utils LANGUAGES CXX)
 
 find_package(PCL REQUIRED)
 include_directories(

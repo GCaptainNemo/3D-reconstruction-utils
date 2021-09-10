@@ -1,7 +1,9 @@
 #include <iostream>
-#include "../include/visualize.h"
+#include "../include/draw_trajectory.h"
 #include <pcl/point_cloud.h>
+#include <pcl/visualization/cloud_viewer.h>
 #include <pcl/visualization/pcl_visualizer.h>
+
 
 void draw_trajector(const std::vector <Eigen::Isometry3d> &poses, const char * option)
 {
@@ -119,3 +121,19 @@ void read_trajectory_file(const std::string & file_address)
 	printf("total %d frames\n", line_index - 2);
 	draw_trajector(poses, "all");
 }
+
+void visualize_rgbxyz(const std::string & pc_address) 
+{
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+	if (pcl::io::loadPLYFile<pcl::PointXYZRGB>(pc_address, *cloud) == -1) {
+		std::cout << "Couldn't read file" << "\n";
+		return;
+	}
+	pcl::visualization::CloudViewer viewer("Simple Cloud Viewer"); //创造一个显示窗口
+	viewer.showCloud(cloud);
+	while (!viewer.wasStopped())
+	{
+	}
+
+};
+
