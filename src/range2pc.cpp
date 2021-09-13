@@ -1,14 +1,13 @@
 #include "../include/range2pc.h"
 #include "../include/utils.h"
 #include "../include/visual_odometry.h"
-#include "opencv2/opencv.hpp"
 #include <math.h>
 #include <string>
 #include <pcl/visualization/cloud_viewer.h>
 #include <pcl/visualization/range_image_visualizer.h>
 #include <pcl/io/pcd_io.h>
 #include <Eigen/Eigen>
-
+#include "opencv2/opencv.hpp"
 #include "opencv2/core.hpp"
 #include <fstream>
 #include <iostream>
@@ -16,7 +15,7 @@
 
 
 
-void launch_traversal_range_img(
+void vo_imu_range2pc(
 	const std::vector<std::string> & depth_address_vec, const std::vector<double> & depth_timestamp_vec,
 	const std::vector<std::string> & rgb_address_vec, const std::vector<double> & rgb_timestamp_vec,
 	const std::vector<std::vector<double>> &extrinsic_vec, const std::vector<double> &extrinsic_timestamp_vec)
@@ -36,9 +35,8 @@ void launch_traversal_range_img(
 			// ////////////////////////////////////////////////////////////////////////////////////
 			const double depth_time_stamp = depth_timestamp_vec[i];
 			const std::string depth_img_address = depth_address_vec[i];
-			//float rotate_mat[9];
-			//float translate_vec[3];
 			Eigen::Isometry3d euc3 =  VO::from_imu(extrinsic_timestamp_vec, extrinsic_vec, depth_time_stamp);
+			
 			// ///////////////////////////////////////////////////////////////////////
 			double min_val_rgb = 10;
 			int min_id_rgb = 0;
@@ -73,6 +71,80 @@ void launch_traversal_range_img(
 
 };
 
+
+void vo_epipolar_range2pc(
+	const std::vector<std::string> & depth_address_vec, const std::vector<double> & depth_timestamp_vec,
+	const std::vector<std::string> & rgb_address_vec, const std::vector<double> & rgb_timestamp_vec,
+	const std::vector<std::vector<double>> &extrinsic_vec, const std::vector<double> &extrinsic_timestamp_vec) 
+{
+	const bool save = true;
+	const float fx = 591.1;
+	const float fy = 590.1;
+	const float cx = 331.0;
+	const float cy = 234.0;
+	cv::Mat intrinsinc_mat = (cv::Mat_<double>(3, 3) << fx, 0, cx, 0, fy, cy, 0.0, 0.0, 1.0);
+
+	const int down_sample_factor = 100;
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+	Eigen::Isometry3d cur_pose = Eigen::Isometry3d::Identity();
+	int last_rgb_img_id;
+	for (int i = 0; i < depth_address_vec.size(); ++i)
+	{
+		if (i % down_sample_factor == 0) {
+			// ////////////////////////////////////////////////////////////////////////////////////
+			// 1. get depth image 
+			// ////////////////////////////////////////////////////////////////////////////////////
+			const double depth_time_stamp = depth_timestamp_vec[i];
+			const std::string depth_img_address = depth_address_vec[i];
+
+			// ///////////////////////////////////////////////////////////////////////
+			int nxt_rgb_id;
+			bool has_bigger = false;
+			for (int j = 0; j < rgb_timestamp_vec.size(); ++j)
+			{
+				if (rgb_timestamp_vec[j] > depth_time_stamp)
+				{
+					nxt_rgb_id = j;
+					has_bigger = true;
+					break;
+				}
+			}
+			if (!has_bigger)
+				break;
+			const std::string nxt_rgbimg_address = rgb_address_vec[nxt_rgb_id];
+			Eigen::Isometry3d relative_pose;
+			if (i != 0) {
+				const std::string last_img_address = rgb_address_vec[last_rgb_img_id];
+				relative_pose = VO::from_rgb_imgs(last_img_address, nxt_rgbimg_address, intrinsinc_mat);
+			}
+			else 
+			{
+				relative_pose = Eigen::Isometry3d::Identity();
+			}
+			cur_pose = relative_pose * cur_pose;
+			// ////////////////////////////////////////////////////////////////////
+			// 2. read rgb_img and depth_img
+			// ////////////////////////////////////////////////////////////////////
+			std::cout << "depth_address = " << depth_img_address << std::endl;
+			depth_img2pc(depth_img_address, nxt_rgbimg_address,
+				fx, fy, cx, cy, cur_pose, false, cloud);
+			printf("total_frame_xyzrgb.size() = %d\n", cloud->size());
+			last_rgb_img_id = nxt_rgb_id;
+		}
+	}
+	//save_ply_file("down_rgb_pc.ply", total_frame_xyzrgb);
+	pcl::visualization::CloudViewer viewer("Simple Cloud Viewer"); //创造一个显示窗口
+	viewer.showCloud(cloud);
+	while (!viewer.wasStopped())
+	{
+	}
+	if (save) { pcl::io::savePCDFile("color_pc_data2.pcd", *cloud); }
+
+
+
+};
+
+
 void read_trajector_rgb_depth(const std::string & file_dir)
 {
 	
@@ -104,9 +176,10 @@ void read_trajector_rgb_depth(const std::string & file_dir)
 	const float cx = 331.0f;
 	const float cy = 234.0f;
 	const float factor = 5000.0f;
-
-	launch_traversal_range_img(depth_address_vec, depth_timestamp_vec, rgb_address_vec, rgb_timestamp_vec,
+	vo_epipolar_range2pc(depth_address_vec, depth_timestamp_vec, rgb_address_vec, rgb_timestamp_vec,
 		extrinsic_vec, extrinsic_timestamp_vec);
+	/*vo_imu_range2pc(depth_address_vec, depth_timestamp_vec, rgb_address_vec, rgb_timestamp_vec,
+		extrinsic_vec, extrinsic_timestamp_vec);*/
 };
 
 

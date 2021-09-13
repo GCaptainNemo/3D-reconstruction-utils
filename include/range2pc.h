@@ -7,8 +7,12 @@
 // get rgb, depth, trajectory
 void read_trajector_rgb_depth(const std::string & file_dir);
 
+void vo_imu_range2pc(
+	const std::vector<std::string> & depth_address_vec, const std::vector<double> & depth_timestamp_vec,
+	const std::vector<std::string> & rgb_address_vec, const std::vector<double> & rgb_timestamp_vec,
+	const std::vector<std::vector<double>> &extrinsic_vec, const std::vector<double> &extrinsic_timestamp_vec);
 
-void launch_traversal_range_img(
+void vo_epipolar_range2pc(
 	const std::vector<std::string> & depth_address_vec, const std::vector<double> & depth_timestamp_vec,
 	const std::vector<std::string> & rgb_address_vec, const std::vector<double> & rgb_timestamp_vec,
 	const std::vector<std::vector<double>> &extrinsic_vec, const std::vector<double> &extrinsic_timestamp_vec);
