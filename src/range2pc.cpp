@@ -1,140 +1,19 @@
 #include "../include/range2pc.h"
+#include "../include/utils.h"
+#include "../include/visual_odometry.h"
 #include "opencv2/opencv.hpp"
 #include <math.h>
 #include <string>
 #include <pcl/visualization/cloud_viewer.h>
 #include <pcl/visualization/range_image_visualizer.h>
 #include <pcl/io/pcd_io.h>
+#include <Eigen/Eigen>
 
 #include "opencv2/core.hpp"
 #include <fstream>
 #include <iostream>
 
 
-
-template<class T>
-void quaternion2matrix(T * quaternion, T * rotate_mat)
-{
-	// quaternion: qx, qy, qz, qw  --> rotate matrix
-	const T w = quaternion[3];
-	const T x = quaternion[0];
-	const T y = quaternion[1];
-	const T z = quaternion[2];
-	rotate_mat[0] = 1 - 2 * pow(y, 2) - 2 * pow(z, 2);
-	rotate_mat[1] = 2 * y * x - 2 * w * z;
-	rotate_mat[2] = 2 * z * x + 2 * w * y;
-	// 
-	rotate_mat[3] = 2 * y * x + 2 * w * z;
-	rotate_mat[4] = 1 - 2 * pow(x, 2) - 2 * pow(z, 2);
-	rotate_mat[5] = 2 * y * z - 2 * w * x;
-	// 
-	rotate_mat[6] = 2 * z * x - 2 * w * y;
-	rotate_mat[7] = 2 * y * z + 2 * w * x;
-	rotate_mat[8] = 1 - 2 * pow(y, 2) - 2 * pow(x, 2);
-};
-
-void vec2float(std::vector<double> extrinsic_ve, float * translate_vec, float * quaternion)
-{
-	// tx, ty, tz
-	for (int i = 0; i < 3; ++i)
-	{
-		translate_vec[i] = (float)extrinsic_ve[i];
-	}
-	// qx, qy, qz, w
-	for (int j = 0; j < 4; ++j)
-	{
-		quaternion[j] = (float)extrinsic_ve[3 + j];
-	}
-};
-
-void interpolate(std::vector<double> & last_extrinsic, std::vector<double> & next_extrinsic,
-	const double & cur_time, const double & last_time, const double & next_time, float * quaternion, float * translate_vec) 
-{
-	float last_translate_vec[3];
-	float last_quaternion[4];
-	vec2float(last_extrinsic, last_translate_vec, last_quaternion);
-	float nxt_translate_vec[3];
-	float nxt_quaternion[4];
-	vec2float(next_extrinsic, nxt_translate_vec, nxt_quaternion);
-	printf("last_tranlate_ = ");
-	for (int i = 0; i < 3; ++i) 
-	{
-		printf("%f, ", last_translate_vec[i]);
-	}
-	printf("\n");
-	printf("nxt_tranlate_ = ");
-	for (int i = 0; i < 3; ++i)
-	{
-		printf("%f, ", nxt_translate_vec[i]);
-	}
-	printf("\n");
-	
-	// 
-	const double translate_t = (cur_time - last_time) / (next_time - last_time);
-	printf("translate_t = %f\n", translate_t);
-	printf("last_time = %f\n", last_time);
-	printf("next_time = %f\n", next_time);
-	printf("cur_time = %f\n", cur_time);
-
-	for (int i = 0; i < 3; ++i) {
-		translate_vec[i] = translate_t * nxt_translate_vec[i] + (1.0 - translate_t) * last_translate_vec[i];
-	}
-	printf("merge vec = ");
-	for (int i = 0; i < 3; ++i)
-	{
-		printf("%f, ", translate_vec[i]);
-	}
-	printf("\n");
-	// 
-	double dot = 0.0;
-	for (int i = 0; i < 4; ++i) 
-	{
-		dot += nxt_quaternion[i] * last_quaternion[i];
-	}
-	if (dot <= 0) 
-	{
-		for (int i = 0; i < 4; ++i)
-		{
-			nxt_quaternion[i] *= -1.0f;
-		}
-		dot *= -1;
-	}
-	
-	//const double theta = acos(dot);
-	//const double proportion_1 = sin(translate_t * theta) / sin(theta);
-	//const double proportion_2 = sin((1 - translate_t) * theta) / sin(theta);
-	//for (int i = 0; i < 4; ++i) {
-	//	quaternion[i] = proportion_1 * nxt_quaternion[i] + proportion_2 * last_quaternion[i];
-	//}
-	float mode = 0.0f;
-	for (int i = 0; i < 4; ++i) {
-		quaternion[i] = translate_t * nxt_quaternion[i] + (1.0 - translate_t) * last_quaternion[i];
-		mode += pow(quaternion[i], 2);
-	}
-	mode = sqrt(mode);
-	for (int i = 0; i < 4; ++i) {
-		quaternion[i] /= mode;
-	}
-
-	printf("last quaternion = ");
-	for (int i = 0; i < 4; ++i)
-	{
-		printf("%f, ", last_quaternion[i]);
-	}
-	printf("\n");
-
-	printf("next quaternion = ");
-	for (int i = 0; i < 4; ++i)
-	{
-		printf("%f, ", nxt_quaternion[i]);
-	}
-	printf("\n");
-	printf("merge quaternion = ");
-	for (int i = 0; i < 4; ++i)
-	{
-		printf("%f, ", quaternion[i]);
-	}
-};
 
 
 void launch_traversal_range_img(
@@ -157,58 +36,16 @@ void launch_traversal_range_img(
 			// ////////////////////////////////////////////////////////////////////////////////////
 			const double depth_time_stamp = depth_timestamp_vec[i];
 			const std::string depth_img_address = depth_address_vec[i];
-			double min_val_extrin = 10;
-			int min_id_extrinsic = 0;
-			for (int j = 0; j < extrinsic_timestamp_vec.size(); ++j)
-			{
-				double delta = abs(extrinsic_timestamp_vec[j] - depth_time_stamp);
-				if (delta < min_val_extrin)
-				{
-					min_val_extrin = delta;
-					min_id_extrinsic = j;
-				}
-			}
-			std::vector<double>  last_extrinsic;
-			std::vector<double>  nxt_extrinsic;
-			float translate_vec[3];
-			float quaternion[4];
-			double last_time;
-			double nxt_time;
-			if ((min_id_extrinsic == 0 && extrinsic_timestamp_vec[min_id_extrinsic] > depth_time_stamp) || 
-				(min_id_extrinsic == extrinsic_timestamp_vec.size() -1 && extrinsic_timestamp_vec[min_id_extrinsic] < depth_time_stamp)) 
-			{
-				last_extrinsic = extrinsic_vec[min_id_extrinsic];
-				vec2float(last_extrinsic, translate_vec, quaternion);
-			}
-			else {
-				if (extrinsic_timestamp_vec[min_id_extrinsic] < depth_time_stamp) {
-					last_extrinsic = extrinsic_vec[min_id_extrinsic];
-					last_time = extrinsic_timestamp_vec[min_id_extrinsic];
-					nxt_extrinsic = extrinsic_vec[min_id_extrinsic + 1];
-					nxt_time = extrinsic_timestamp_vec[min_id_extrinsic + 1];
-				}
-				else {
-					last_extrinsic = extrinsic_vec[min_id_extrinsic - 1];
-					last_time = extrinsic_timestamp_vec[min_id_extrinsic - 1];
-					nxt_extrinsic = extrinsic_vec[min_id_extrinsic];
-					nxt_time = extrinsic_timestamp_vec[min_id_extrinsic];
-				}
-				interpolate(last_extrinsic, nxt_extrinsic, depth_time_stamp, last_time, nxt_time, quaternion, translate_vec);
-			}
-			printf("min_id = %d \n", min_id_extrinsic);
-			
-		
-
-			float rotate_mat[9];
-			quaternion2matrix(quaternion, rotate_mat);
-
+			//float rotate_mat[9];
+			//float translate_vec[3];
+			Eigen::Isometry3d euc3 =  VO::from_imu(extrinsic_timestamp_vec, extrinsic_vec, depth_time_stamp);
 			// ///////////////////////////////////////////////////////////////////////
 			double min_val_rgb = 10;
 			int min_id_rgb = 0;
 			for (int j = 0; j < rgb_timestamp_vec.size(); ++j)
 			{
 				double delta = abs(rgb_timestamp_vec[j] - depth_time_stamp);
-				if (delta < min_val_extrin)
+				if (delta < min_val_rgb)
 				{
 					min_val_rgb = delta;
 					min_id_rgb = j;
@@ -220,10 +57,9 @@ void launch_traversal_range_img(
 			// ////////////////////////////////////////////////////////////////////
 			// 2. read rgb_img and depth_img
 			// ////////////////////////////////////////////////////////////////////
-			printf("min_id = %d", min_id_extrinsic);
 			std::cout << "depth_address = " << depth_img_address << std::endl;
 			depth_img2pc(depth_img_address, rgb_img_address,
-				fx, fy, cx, cy, rotate_mat, translate_vec, false, cloud);
+				fx, fy, cx, cy, euc3, false, cloud);
 			printf("total_frame_xyzrgb.size() = %d\n", cloud->size());
 		}
 	}
@@ -307,8 +143,46 @@ void depth_img2pc(const std::string & depth_img_address, const std::string & rgb
 			cloud->push_back(rgb_p);
 		}
 	}
-
 };
+
+
+void depth_img2pc(const std::string & depth_img_address, const std::string & rgb_img_address,
+	const float & fx, const float & fy, const float & cx, const float & cy,
+	const Eigen::Isometry3d & euc3, const bool is_save, pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud) 
+{
+	cv::Mat depth_img = cv::imread(depth_img_address, -1);
+	cv::Mat rgb_img = cv::imread(rgb_img_address, -1);
+	const float factor = 5000.0f;
+	const int img_col = depth_img.cols;
+	const int img_row = depth_img.rows;
+
+	for (int row = 0; row < img_row; ++row)
+	{
+		for (int col = 0; col < img_col; ++col)
+		{
+			pcl::PointXYZRGB rgb_p;
+			const int depth = depth_img.at<uint16_t>(row, col);
+			//printf("depth = %d\n", depth);
+			if (depth == 0)
+				continue;
+			// camera coordinate
+			const float Z = (float)(depth) / 5000;
+			const Eigen::Vector3d dst = euc3 * Eigen::Vector3d(((float)(col)-cx) / fx * Z, 
+															   ((float)(row)-cy) / fy * Z, 
+																Z);
+			// global coordinate(m)
+			rgb_p.x = dst[0] * 1.0f;
+			rgb_p.y = dst[1] * 1.0f;
+			rgb_p.z = dst[2] * 1.0f;
+			rgb_p.r = rgb_img.at<cv::Vec3b>(row, col)[2];
+			rgb_p.g = rgb_img.at<cv::Vec3b>(row, col)[1];
+			rgb_p.b = rgb_img.at<cv::Vec3b>(row, col)[0];
+			cloud->push_back(rgb_p);
+		}
+	}
+};
+
+
 
 
 void read_trajectory_file(const std::string &file_name, std::vector<std::vector<double>> & extrinsic_vec,
@@ -366,21 +240,4 @@ void read_img_file(const std::string &address, std::vector<std::string> & file_a
 
 };
 
-
-std::vector<std::string> split(const std::string &str, const std::string &pattern)
-{
-	std::vector<std::string> res;
-	if (str == "")
-		return res;
-	std::string strs = str + pattern;
-	size_t pos = strs.find(pattern);
-	while (pos != strs.npos)
-	{
-		std::string temp = strs.substr(0, pos);
-		res.push_back(temp);
-		strs = strs.substr(pos + 1, strs.size());
-		pos = strs.find(pattern);
-	}
-	return res;
-}
 

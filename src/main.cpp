@@ -1,12 +1,11 @@
-#include "../include/draw_trajectory.h"
+#include "../include/demos.h"
+
+
 
 int main() 
 {
-	/*const std::string traj_file = "../data/groundtruth.txt";
-	read_trajectory_file(traj_file);
-	*/
-	const std::string ply_file = "D:/pg_cuda/cuda-tsdf/build/total_rgb_pc.ply";
-	visualize_rgbxyz(ply_file);
+	//test_draw_trajectory();
+	test_rangeimg2pc();
 	return 0;
 }
 
