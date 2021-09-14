@@ -22,12 +22,15 @@ namespace VO
 	Eigen::Isometry3d from_rgb_imgs(const std::string & last_img_address, const std::string & nxt_img_address, const cv::Mat & intrinsinc_mat);
 
 	void find_feature_match(const cv::Mat & last_img, const cv::Mat & next_img,
-		std::vector<cv::Point2f> & last_key_pts, std::vector<cv::Point2f> & next_key_pts, 
-		std::vector<cv::DMatch> & matches, const cv::Mat & intrinsic_mat, cv::Mat & essential_mat);
+		std::vector<cv::Point2f> & last_2f, std::vector<cv::Point2f> & next_2f,
+		const cv::Mat & intrinsic_mat, cv::Mat & essential_mat, const bool is_draw);
 
 	void pose_estimate_2d2d(const std::vector<cv::Point2f> & last_key_pts, const std::vector<cv::Point2f> & next_key_pts, 
-		const std::vector<cv::DMatch> & matches, cv::Mat & R, cv::Mat & t, const cv::Mat & intrinsic_mat, 
+		cv::Mat & R, cv::Mat & t, const cv::Mat & intrinsic_mat, 
 		const cv::Mat & essential_mat);
+
+	void verify_epipolar_constraint(const cv::Mat & essential_mat, const cv::Mat & intrinsic_mat,
+		const std::vector<cv::Point2f> & last_pts, const std::vector<cv::Point2f> & next_pts);
 
 }
 

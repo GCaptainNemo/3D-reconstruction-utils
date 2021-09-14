@@ -38,7 +38,7 @@ void vo_imu_range2pc(
 			Eigen::Isometry3d euc3 =  VO::from_imu(extrinsic_timestamp_vec, extrinsic_vec, depth_time_stamp);
 			
 			// ///////////////////////////////////////////////////////////////////////
-			double min_val_rgb = 10;
+			double min_val_rgb = 10.0;
 			int min_id_rgb = 0;
 			for (int j = 0; j < rgb_timestamp_vec.size(); ++j)
 			{
@@ -84,7 +84,7 @@ void vo_epipolar_range2pc(
 	const float cy = 234.0;
 	cv::Mat intrinsinc_mat = (cv::Mat_<double>(3, 3) << fx, 0, cx, 0, fy, cy, 0.0, 0.0, 1.0);
 
-	const int down_sample_factor = 100;
+	const int down_sample_factor = 10;
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
 	Eigen::Isometry3d cur_pose = Eigen::Isometry3d::Identity();
 	int last_rgb_img_id;
@@ -203,7 +203,7 @@ void depth_img2pc(const std::string & depth_img_address, const std::string & rgb
 			if (depth == 0)
 				continue;
 			// camera coordinate
-			const float Z = (float)(depth) / 5000;
+			const float Z = (float)(depth) / 5000.0f;
 			const float X = ((float)(col)-cx) / fx * Z;
 			const float Y = ((float)(row)-cy) / fy * Z;
 			// global coordinate(m)
