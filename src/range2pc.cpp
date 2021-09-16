@@ -154,7 +154,7 @@ void vo_icp_range2pc(
 	const float cy = 234.0;
 	cv::Mat intrinsinc_mat = (cv::Mat_<double>(3, 3) << fx, 0, cx, 0, fy, cy, 0.0, 0.0, 1.0);
 
-	const int down_sample_factor = 10;
+	const int down_sample_factor = 100;
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
 	Eigen::Isometry3d cur_pose = Eigen::Isometry3d::Identity();
 	for (int i = 0; i < depth_address_vec.size() - 1; ++i)

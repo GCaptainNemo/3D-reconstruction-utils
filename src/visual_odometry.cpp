@@ -283,7 +283,7 @@ namespace VO
 		depth_img2pc_xyz(next_dimg_address, intrinsinc_mat, next_cloud);
 
 		// ICP algorithm
-
+		std::cout << "start ICP registration!!! " << std::endl;
 		pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
 		icp.setInputSource(last_cloud);
 		icp.setInputTarget(next_cloud);
@@ -291,9 +291,11 @@ namespace VO
 		icp.align(Final);
 		std::cout << "has converged:" << icp.hasConverged() << " score: " <<
 			icp.getFitnessScore() << std::endl;
-		std::cout << icp.getFinalTransformation() << std::endl;
-		Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
+		Eigen::Matrix4d transform_mat = icp.getFinalTransformation();
+		std::cout << transform_mat << std::endl;
+		Eigen::Isometry3d pose(transform_mat);
 		return pose;
+		//return transform_mat;
 	};
 
 	void depth_img2pc_xyz(const std::string & depth_img_address, const cv::Mat & intrinsinc_mat,
