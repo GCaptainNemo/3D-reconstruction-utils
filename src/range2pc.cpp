@@ -139,12 +139,77 @@ void vo_epipolar_range2pc(
 	{
 	}
 	if (save) { pcl::io::savePCDFile("color_pc_data2.pcd", *cloud); }
-
-
-
 };
 
 
+void vo_icp_range2pc(
+	const std::vector<std::string> & depth_address_vec, const std::vector<double> & depth_timestamp_vec,
+	const std::vector<std::string> & rgb_address_vec, const std::vector<double> & rgb_timestamp_vec,
+	const std::vector<std::vector<double>> &extrinsic_vec, const std::vector<double> &extrinsic_timestamp_vec) 
+{
+	const bool save = true;
+	const float fx = 591.1;
+	const float fy = 590.1;
+	const float cx = 331.0;
+	const float cy = 234.0;
+	cv::Mat intrinsinc_mat = (cv::Mat_<double>(3, 3) << fx, 0, cx, 0, fy, cy, 0.0, 0.0, 1.0);
+
+	const int down_sample_factor = 10;
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+	Eigen::Isometry3d cur_pose = Eigen::Isometry3d::Identity();
+	for (int i = 0; i < depth_address_vec.size() - 1; ++i)
+	{
+		if (i % down_sample_factor == 0) 
+		{
+			// ////////////////////////////////////////////////////////////////////////////////////
+			// 1. get depth image 
+			// ////////////////////////////////////////////////////////////////////////////////////
+			const double next_depth_time_stamp = depth_timestamp_vec[i];
+			const std::string next_depth_img_address = depth_address_vec[i];
+			double min_val_rgb = 10.0;
+			int min_id_rgb = 0;
+			for (int j = 0; j < rgb_timestamp_vec.size(); ++j)
+			{
+				double delta = abs(rgb_timestamp_vec[j] - next_depth_time_stamp);
+				if (delta < min_val_rgb)
+				{
+					min_val_rgb = delta;
+					min_id_rgb = j;
+				}
+			}
+			const std::string nxt_rgbimg_address = rgb_address_vec[min_id_rgb];
+			Eigen::Isometry3d relative_pose;
+			if (i != 0) 
+			{	
+				const std::string last_depth_img_address = depth_address_vec[i - down_sample_factor];
+				relative_pose = VO::icp_depth_imgs(last_depth_img_address,
+					next_depth_img_address, 
+					intrinsinc_mat);
+			}
+			else
+			{
+				relative_pose = Eigen::Isometry3d::Identity();
+			}
+			cur_pose = relative_pose * cur_pose;
+			// ////////////////////////////////////////////////////////////////////
+			// 2. read rgb_img and depth_img
+			// ////////////////////////////////////////////////////////////////////
+			depth_img2pc(next_depth_img_address, nxt_rgbimg_address,
+				fx, fy, cx, cy, cur_pose, false, cloud);
+			printf("total_frame_xyzrgb.size() = %d\n", cloud->size());
+		}
+	}
+	//save_ply_file("down_rgb_pc.ply", total_frame_xyzrgb);
+	pcl::visualization::CloudViewer viewer("Simple Cloud Viewer"); //创造一个显示窗口
+	viewer.showCloud(cloud);
+	while (!viewer.wasStopped())
+	{
+	}
+	if (save) { pcl::io::savePCDFile("color_pc_data2.pcd", *cloud); }
+
+};
+
+// /////////////////////////////////////////////////////////////////////
 void read_trajector_rgb_depth(const std::string & file_dir)
 {
 	
@@ -176,10 +241,15 @@ void read_trajector_rgb_depth(const std::string & file_dir)
 	const float cx = 331.0f;
 	const float cy = 234.0f;
 	const float factor = 5000.0f;
-	vo_epipolar_range2pc(depth_address_vec, depth_timestamp_vec, rgb_address_vec, rgb_timestamp_vec,
+	//vo_imu_range2pc(depth_address_vec, depth_timestamp_vec, rgb_address_vec, rgb_timestamp_vec,
+	//	extrinsic_vec, extrinsic_timestamp_vec);
+	//
+	//vo_epipolar_range2pc(depth_address_vec, depth_timestamp_vec, rgb_address_vec, rgb_timestamp_vec,
+	//	extrinsic_vec, extrinsic_timestamp_vec);
+	
+	vo_icp_range2pc(depth_address_vec, depth_timestamp_vec, rgb_address_vec, rgb_timestamp_vec,
 		extrinsic_vec, extrinsic_timestamp_vec);
-	/*vo_imu_range2pc(depth_address_vec, depth_timestamp_vec, rgb_address_vec, rgb_timestamp_vec,
-		extrinsic_vec, extrinsic_timestamp_vec);*/
+
 };
 
 

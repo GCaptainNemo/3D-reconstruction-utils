@@ -1,6 +1,10 @@
 #include "../include/visual_odometry.h"
+#include "../include/visual_odometry.h"
 #include "../include/utils.h"
 #include <math.h>
+#include <pcl/visualization/cloud_viewer.h>
+#include <pcl/visualization/range_image_visualizer.h>
+#include <pcl/registration/icp.h>  
 
 
 // VO: use IMU groud truth
@@ -109,7 +113,7 @@ namespace VO
 
 		// extract correspond points
 		cv::Mat essential_mat;
-		VO::find_feature_match(last_img, next_img, last_match_pts, next_match_pts, intrinsinc_mat, essential_mat, false);
+		VO::feature_match(last_img, next_img, last_match_pts, next_match_pts, intrinsinc_mat, essential_mat, false);
 		// ////////////////////////////////////////////////////////////////////////////////////////////////
 		// verify epipolar constraint
 		VO::verify_epipolar_constraint(intrinsinc_mat, essential_mat, last_match_pts, next_match_pts);
@@ -120,7 +124,7 @@ namespace VO
 		cv::Mat t;
 		VO::pose_estimate_2d2d(last_match_pts, next_match_pts, R, t, intrinsinc_mat, essential_mat);
 
-		
+
 		// to Isometry
 		Eigen::Isometry3d res = Eigen::Isometry3d::Identity();
 		Eigen::Vector3d translate_vec;
@@ -128,8 +132,8 @@ namespace VO
 		translate_vec << t.at<double>(0, 0), t.at<double>(1, 0), t.at<double>(2, 0);
 		Eigen::Matrix3d rotation_mat = Eigen::Matrix3d::Identity();
 		rotation_mat << R.at<double>(0, 0), R.at<double>(0, 1), R.at<double>(0, 2),
-						R.at<double>(1, 0), R.at<double>(1, 1), R.at<double>(1, 2),
-						R.at<double>(2, 0), R.at<double>(2, 1), R.at<double>(2, 2);
+			R.at<double>(1, 0), R.at<double>(1, 1), R.at<double>(1, 2),
+			R.at<double>(2, 0), R.at<double>(2, 1), R.at<double>(2, 2);
 		std::cout << "rotation_mat  = " << rotation_mat << std::endl;
 		std::cout << "translate_vec = " << translate_vec << std::endl;
 
@@ -139,7 +143,7 @@ namespace VO
 
 	};
 
-	void find_feature_match(const cv::Mat & last_img, const cv::Mat & next_img,
+	void feature_match(const cv::Mat & last_img, const cv::Mat & next_img,
 		std::vector<cv::Point2f> & last_2f, std::vector<cv::Point2f> & next_2f,
 		const cv::Mat & intrinsic_mat, cv::Mat & essential_mat, const bool is_draw)
 	{
@@ -172,15 +176,15 @@ namespace VO
 		std::cout << "max dist = " << max_dist << std::endl;
 
 		std::vector<cv::DMatch> good_matches;
-		for (int i = 0; i < descriptors_last.rows; ++i) 
+		for (int i = 0; i < descriptors_last.rows; ++i)
 		{
-			if (coarse_matches[i].distance <= (2 * min_dist > 30.0? 2 * min_dist : 30.0))
+			if (coarse_matches[i].distance <= (2 * min_dist > 30.0 ? 2 * min_dist : 30.0))
 			{
 				good_matches.push_back(coarse_matches[i]);
 			}
 		}
 
-		
+
 		// 5. use essential matrix Ransac filter again
 		std::vector <cv::Point2f> points_last;
 		std::vector <cv::Point2f> points_next;
@@ -207,7 +211,7 @@ namespace VO
 		std::cout << "optimize_matches.size = " << optimize_matches.size() << std::endl;
 
 		// 6. draw match result
-		if (is_draw) 
+		if (is_draw)
 		{
 			cv::Mat coarse_match_imgs;
 			cv::Mat good_match_imgs;
@@ -230,13 +234,13 @@ namespace VO
 
 
 	void pose_estimate_2d2d(const std::vector<cv::Point2f> & last_match_pts, const std::vector<cv::Point2f> & next_match_pts,
-		cv::Mat & R, cv::Mat & t, const cv::Mat & intrinsic_mat, const cv::Mat & essential_mat) 
+		cv::Mat & R, cv::Mat & t, const cv::Mat & intrinsic_mat, const cv::Mat & essential_mat)
 	{
 		// use epipolar constraint to recover camera poses
 		cv::recoverPose(essential_mat, last_match_pts, next_match_pts, intrinsic_mat, R, t);
 		std::cout << "R = " << R << std::endl;
 		std::cout << "t = " << t << std::endl;
-		cv::Mat t_x = (cv::Mat_<double>(3, 3) << 
+		cv::Mat t_x = (cv::Mat_<double>(3, 3) <<
 			0.0, -t.at<double>(2, 0), t.at<double>(1, 0),
 			t.at<double>(2, 0), 0.0, -t.at<double>(0, 0),
 			-t.at<double>(1, 0), t.at<double>(0, 0), 0.0);
@@ -256,7 +260,7 @@ namespace VO
 		cv::invert(intrinsic_mat, inv_K);
 		std::cout << "eye£¨3£© = " << intrinsic_mat * inv_K << std::endl;
 		cv::Mat fundamental_mat = inv_K.t() * essential_mat * inv_K;
-		for (int i = 0; i < last_pts.size(); ++i) 
+		for (int i = 0; i < last_pts.size(); ++i)
 		{
 			cv::Mat p1 = (cv::Mat_<double>(3, 1) << last_pts[i].x, last_pts[i].y, 1);
 			cv::Mat p2 = (cv::Mat_<double>(3, 1) << next_pts[i].x, next_pts[i].y, 1);
@@ -264,8 +268,68 @@ namespace VO
 			cv::Mat constraint_loss = p2.t() * fundamental_mat * p1;
 			std::cout << "epipolar constraint = " << constraint_loss << std::endl;
 		}
-	
+
 	};
 
 
+	// //////////////////////////////////////////////////////////////////////////////////
+
+	Eigen::Isometry3d icp_depth_imgs(const std::string & last_dimg_address,
+		const std::string & next_dimg_address, const cv::Mat & intrinsinc_mat)
+	{
+		pcl::PointCloud<pcl::PointXYZ>::Ptr last_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+		pcl::PointCloud<pcl::PointXYZ>::Ptr next_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+		depth_img2pc_xyz(last_dimg_address, intrinsinc_mat, last_cloud);
+		depth_img2pc_xyz(next_dimg_address, intrinsinc_mat, next_cloud);
+
+		// ICP algorithm
+
+		pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
+		icp.setInputSource(last_cloud);
+		icp.setInputTarget(next_cloud);
+		pcl::PointCloud<pcl::PointXYZ> Final;
+		icp.align(Final);
+		std::cout << "has converged:" << icp.hasConverged() << " score: " <<
+			icp.getFitnessScore() << std::endl;
+		std::cout << icp.getFinalTransformation() << std::endl;
+		Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
+		return pose;
+	};
+
+	void depth_img2pc_xyz(const std::string & depth_img_address, const cv::Mat & intrinsinc_mat,
+		pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
+	{
+		const double fx = intrinsinc_mat.at<double>(0, 0);
+		const double cx = intrinsinc_mat.at<double>(0, 2);
+		const double fy = intrinsinc_mat.at<double>(1, 1);
+		const double cy = intrinsinc_mat.at<double>(1, 2);
+		// ////////////////////////////////////////////////////////////
+		cv::Mat depth_img = cv::imread(depth_img_address, -1);
+		const float factor = 5000.0f;
+		const int img_col = depth_img.cols;
+		const int img_row = depth_img.rows;
+
+		for (int row = 0; row < img_row; ++row)
+		{
+			for (int col = 0; col < img_col; ++col)
+			{
+				pcl::PointXYZ pc;
+				const int depth = depth_img.at<uint16_t>(row, col);
+				//printf("depth = %d\n", depth);
+				if (depth == 0)
+					continue;
+				// camera coordinate
+				const float Z = (float)(depth) / 5000.0f;
+				const float X = ((float)(col)-cx) / fx * Z;
+				const float Y = ((float)(row)-cy) / fy * Z;
+				// global coordinate(m)
+				pc.x = X;
+				pc.y = Y;
+				pc.z = Z;
+				cloud->push_back(pc);
+			}
+
+		}
+
+	}
 }
