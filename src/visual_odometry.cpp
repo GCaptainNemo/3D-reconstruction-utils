@@ -291,11 +291,11 @@ namespace VO
 		icp.align(Final);
 		std::cout << "has converged:" << icp.hasConverged() << " score: " <<
 			icp.getFitnessScore() << std::endl;
-		Eigen::Matrix4d transform_mat = icp.getFinalTransformation();
+		Eigen::Matrix4d transform_mat = icp.getFinalTransformation().cast<double>();
 		std::cout << transform_mat << std::endl;
+		// Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
 		Eigen::Isometry3d pose(transform_mat);
 		return pose;
-		//return transform_mat;
 	};
 
 	void depth_img2pc_xyz(const std::string & depth_img_address, const cv::Mat & intrinsinc_mat,
@@ -310,10 +310,11 @@ namespace VO
 		const float factor = 5000.0f;
 		const int img_col = depth_img.cols;
 		const int img_row = depth_img.rows;
+		const int down_sample_factor = 2;
 
-		for (int row = 0; row < img_row; ++row)
+		for (int row = 0; row < img_row; row+=down_sample_factor)
 		{
-			for (int col = 0; col < img_col; ++col)
+			for (int col = 0; col < img_col; col+=down_sample_factor)
 			{
 				pcl::PointXYZ pc;
 				const int depth = depth_img.at<uint16_t>(row, col);
@@ -330,8 +331,7 @@ namespace VO
 				pc.z = Z;
 				cloud->push_back(pc);
 			}
-
 		}
-
+		std::cout << "size = " << cloud->size() << std::endl;
 	}
 }

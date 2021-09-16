@@ -1,6 +1,6 @@
 #include "../include/demos.h"
-
-
+#include <Eigen/Eigen>
+#include <iostream>
 
 int main() 
 {
