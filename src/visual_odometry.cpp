@@ -1,6 +1,7 @@
 #include "../include/visual_odometry.h"
 #include "../include/visual_odometry.h"
 #include "../include/utils.h"
+#include "../icp/icp.h"
 #include <math.h>
 #include <pcl/visualization/cloud_viewer.h>
 #include <pcl/visualization/range_image_visualizer.h>
@@ -281,17 +282,32 @@ namespace VO
 		pcl::PointCloud<pcl::PointXYZ>::Ptr next_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 		depth_img2pc_xyz(last_dimg_address, intrinsinc_mat, last_cloud);
 		depth_img2pc_xyz(next_dimg_address, intrinsinc_mat, next_cloud);
+		pcl::PointCloud<pcl::PointXYZI>::Ptr src(
+			new pcl::PointCloud<pcl::PointXYZI>);
+		pcl::PointCloud<pcl::PointXYZI>::Ptr tgt(
+			new pcl::PointCloud<pcl::PointXYZI>);
+		pcl::copyPointCloud(*last_cloud, *src);
+		pcl::copyPointCloud(*next_cloud, *tgt);
 
 		// ICP algorithm
 		std::cout << "start ICP registration!!! " << std::endl;
-		pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
-		icp.setInputSource(last_cloud);
-		icp.setInputTarget(next_cloud);
-		pcl::PointCloud<pcl::PointXYZ> Final;
-		icp.align(Final);
-		std::cout << "has converged:" << icp.hasConverged() << " score: " <<
-			icp.getFitnessScore() << std::endl;
-		Eigen::Matrix4d transform_mat = icp.getFinalTransformation().cast<double>();
+		// option: icpPointToPlane, icpPlaneToPlane, PointToPlane, PointToPoint
+		const std::string option = "icpPlaneToPlane";
+		Eigen::Matrix4d transform_mat = ICP_set::run(src, tgt, ICP_set::icp_map[option]).cast<double>();
+
+		//pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
+		//icp.setInputSource(last_cloud);
+		//icp.setInputTarget(next_cloud);
+		//pcl::PointCloud<pcl::PointXYZ> Final;
+		//icp.setMaxCorrespondenceDistance(150); // 1500
+		//icp.setTransformationEpsilon(1e-3);
+		//icp.setEuclideanFitnessEpsilon(0.01); // 0.1
+		//icp.setMaximumIterations(100);        // 100
+		//icp.align(Final);
+		//std::cout << "has converged:" << icp.hasConverged() << " score: " <<
+		//	icp.getFitnessScore() << std::endl;
+		//Eigen::Matrix4d transform_mat = icp.getFinalTransformation().cast<double>();
+		
 		std::cout << transform_mat << std::endl;
 		// Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
 		Eigen::Isometry3d pose(transform_mat);

@@ -310,7 +310,7 @@ void depth_img2pc(const std::string & depth_img_address, const std::string & rgb
 				continue;
 			// camera coordinate
 			const float Z = (float)(depth) / 5000;
-			const Eigen::Vector3d dst = euc3 * Eigen::Vector3d(((float)(col)-cx) / fx * Z, 
+			const Eigen::Vector3d dst = euc3.inverse() * Eigen::Vector3d(((float)(col)-cx) / fx * Z, 
 															   ((float)(row)-cy) / fy * Z, 
 																Z);
 			// global coordinate(m)
